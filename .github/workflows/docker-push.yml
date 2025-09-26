@@ -129,18 +129,33 @@ jobs:
 
           echo "Matrix setup complete: $MATRIX"
           echo "::set-output name=matrix::$MATRIX"
-
+          
+# ...existing code...
   build-and-push:
+    # changed: ensure this job uses the matrix produced earlier and depends on setup-matrix
+    needs: setup-matrix
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    # optional: skip if matrix is empty (setup-matrix already exited when empty)
+    if: ${{ matrix.go-api != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Show build context (debug)
+        run: |
+          echo "Building for matrix entry: ${{ matrix.go-api }}"
+          ls -la ./${{ matrix.go-api }} || true
+          if [ ! -f "./${{ matrix.go-api }}/Dockerfile" ]; then
+            echo "ERROR: Dockerfile not found in ./${{ matrix.go-api }}/"
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Docker metadata
+      - name: Docker metadata like naming image
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -168,7 +183,10 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          # changed: set context to the api folder and point to that folder's Dockerfile
+          context: ./${{ matrix.go-api }}
+          file: ./${{ matrix.go-api }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+# ...existing code...
