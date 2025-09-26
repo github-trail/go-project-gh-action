@@ -1,0 +1,312 @@
+name: Build & Push PMI Adapters (Monorepo)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'adapters/**'
+      - 'pkg/**'
+      - 'go.work'
+      - 'go.mod'
+  pull_request:
+    branches: [main]
+    types: [ opened, synchronize ]
+    paths:
+      - 'adapters/**'
+      - 'pkg/**'
+      - 'go.work'
+      - 'go.mod'
+  workflow_dispatch:
+    inputs:
+      adapter-name:
+        description: "Adapter to build (e.g., pmia-taas, pmia-example)"
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - 'pmia-example'
+          - 'pmia-pos-ex-simulator'
+          - 'pmia-sipay-epay'
+          - 'pmia-taas'
+          - 'pmia-stera'
+        default: 'all'
+      tag-name:
+        description: "tag name: Like `pr-123`"
+        required: false
+      registry-name:
+        description: 'registry docker repo'
+        required: false
+        type: choice
+        options:
+          - 'ncrvoyix-pmi-adapters-docker-public.jfrog.io'
+          - 'ncrvoyix-pmi-adapters-docker-releases.jfrog.io'
+          - 'ncrvoyix-pmi-adapters-docker-snapshots.jfrog.io'
+        default: 'ncrvoyix-pmi-adapters-docker-snapshots.jfrog.io'
+      registry-name-edge:
+        description: 'registry docker repo edge'
+        required: false
+        type: string
+        default: 'us-east1-docker.pkg.dev/ret-edge-pltf-infra/workloads'
+      push-latest:
+        description: "Push the 'latest' tag (only on main)"
+        required: false
+        type: boolean
+        default: false
+      push-edge:
+        description: "Push to edge registry"
+        required: false
+        type: boolean
+        default: true
+
+env:
+  PROJECT_PATH: .
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: read
+
+jobs:
+
+  detect-changes:
+    name: Detect Changed Adapters
+    runs-on: ubuntu-latest
+    outputs:
+      pmia-example: ${{ steps.filter.outputs.pmia-example }}
+      pmia-pos-ex-simulator: ${{ steps.filter.outputs.pmia-pos-ex-simulator }}
+      pmia-sipay-epay: ${{ steps.filter.outputs.pmia-sipay-epay }}
+      pmia-taas: ${{ steps.filter.outputs.pmia-taas }}
+      pmia-stera: ${{ steps.filter.outputs.pmia-stera }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Detect changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            pmia-example:
+              - 'adapters/pmia-example/**'
+            pmia-pos-ex-simulator:
+              - 'adapters/pmia-pos-ex-simulator/**'
+            pmia-sipay-epay:
+              - 'adapters/pmia-sipay-epay/**'
+            pmia-taas:
+              - 'adapters/pmia-taas/**'
+            pmia-stera:
+              - 'adapters/pmia-stera/**'
+            shared:
+              - 'pkg/**'
+              - 'go.work*'
+              - 'go.mod'
+
+  setup-matrix:
+    name: Setup Build Matrix
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    outputs:
+      matrix: ${{ steps.setup.outputs.matrix }}
+    steps:
+      - name: Setup adapter build matrix
+        id: setup
+        run: |
+          # Define adapter configurations
+          declare -A ADAPTER_CONFIGS
+          ADAPTER_CONFIGS["pmia-example"]='{"pmi_version":"v4.3.0","openapi_spec":"PMI_POS_EX_2_79_0.yaml"}'
+          ADAPTER_CONFIGS["pmia-pos-ex-simulator"]='{"pmi_version":"v4.3.0","openapi_spec":"PMI_POS_EX_2_79_0.yaml"}'
+          ADAPTER_CONFIGS["pmia-sipay-epay"]='{"pmi_version":"v4.3.0","openapi_spec":"PMI_POS_EX_2_79_0.yaml"}'
+          ADAPTER_CONFIGS["pmia-taas"]='{"pmi_version":"v4.3.0","openapi_spec":"PMI_POS_EX_2_79_0.yaml"}'
+          ADAPTER_CONFIGS["pmia-stera"]='{"pmi_version":"v4.3.0","openapi_spec":"PMI_POS_EX_2_79_0.yaml"}'
+          
+          echo "=== Change Detection Results ==="
+          echo "pmia-example changed: ${{ needs.detect-changes.outputs.pmia-example }}"
+          echo "pmia-pos-ex-simulator changed: ${{ needs.detect-changes.outputs.pmia-pos-ex-simulator }}"
+          echo "pmia-sipay-epay changed: ${{ needs.detect-changes.outputs.pmia-sipay-epay }}"
+          echo "pmia-taas changed: ${{ needs.detect-changes.outputs.pmia-taas }}"
+          echo "pmia-stera changed: ${{ needs.detect-changes.outputs.pmia-stera }}"
+          echo "Shared files changed: ${{ needs.detect-changes.outputs.shared }}"
+          
+          # Determine which adapters to build
+          ADAPTERS_TO_BUILD=()
+          
+          # Manual workflow dispatch - build specific adapter or all
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.adapter-name }}" == "all" ]]; then
+              echo "🎯 Manual workflow dispatch - building ALL adapters"
+              ADAPTERS_TO_BUILD=("pmia-example" "pmia-pos-ex-simulator" "pmia-sipay-epay" "pmia-taas" "pmia-stera")
+            elif [[ -n "${{ github.event.inputs.adapter-name }}" && "${{ github.event.inputs.adapter-name }}" != "all" ]]; then
+              echo "🎯 Manual workflow dispatch - building: ${{ github.event.inputs.adapter-name }}"
+              ADAPTERS_TO_BUILD=("${{ github.event.inputs.adapter-name }}")
+            else
+              echo "🎯 Manual workflow dispatch - using change detection"
+              # Fall through to automatic detection
+            fi
+          fi
+          
+          # If not manual override, use change detection
+          if [[ ${#ADAPTERS_TO_BUILD[@]} -eq 0 ]]; then
+            # If shared files changed, build all adapters
+            if [[ "${{ needs.detect-changes.outputs.shared }}" == "true" ]]; then
+              echo "🔗 Shared files changed - building ALL adapters"
+              ADAPTERS_TO_BUILD=("pmia-example" "pmia-pos-ex-simulator" "pmia-sipay-epay" "pmia-taas" "pmia-stera")
+            else
+              # Build only changed adapters
+              echo "🎯 Building only changed adapters:"
+              
+              if [[ "${{ needs.detect-changes.outputs.pmia-example }}" == "true" ]]; then
+                echo "  - pmia-example"
+                ADAPTERS_TO_BUILD+=("pmia-example")
+              fi
+              
+              if [[ "${{ needs.detect-changes.outputs.pmia-pos-ex-simulator }}" == "true" ]]; then
+                echo "  - pmia-pos-ex-simulator"
+                ADAPTERS_TO_BUILD+=("pmia-pos-ex-simulator")
+              fi
+              
+              if [[ "${{ needs.detect-changes.outputs.pmia-sipay-epay }}" == "true" ]]; then
+                echo "  - pmia-sipay-epay"
+                ADAPTERS_TO_BUILD+=("pmia-sipay-epay")
+              fi
+              
+              if [[ "${{ needs.detect-changes.outputs.pmia-taas }}" == "true" ]]; then
+                echo "  - pmia-taas"
+                ADAPTERS_TO_BUILD+=("pmia-taas")
+              fi
+              
+              if [[ "${{ needs.detect-changes.outputs.pmia-stera }}" == "true" ]]; then
+                echo "  - pmia-stera"
+                ADAPTERS_TO_BUILD+=("pmia-stera")
+              fi
+              
+              if [[ ${#ADAPTERS_TO_BUILD[@]} -eq 0 ]]; then
+                echo "⏭️ No adapters changed - skipping builds"
+              fi
+            fi
+          fi
+          
+          # Build matrix JSON
+          MATRIX_JSON='{"include":['
+          MATRIX_ENTRIES=""
+          
+          for adapter in "${ADAPTERS_TO_BUILD[@]}"; do
+            if [[ -n "${ADAPTER_CONFIGS[$adapter]:-}" ]]; then
+              config="${ADAPTER_CONFIGS[$adapter]}"
+              pmi_version=$(echo "$config" | jq -r '.pmi_version')
+              openapi_spec=$(echo "$config" | jq -r '.openapi_spec')
+              
+              if [[ -n "$MATRIX_ENTRIES" ]]; then
+                MATRIX_ENTRIES+=","
+              fi
+              MATRIX_ENTRIES+="{\"adapter\":\"$adapter\",\"pmi_version\":\"$pmi_version\",\"openapi_spec\":\"$openapi_spec\"}"
+              
+              echo "Added to matrix: $adapter (PMI: $pmi_version, Spec: $openapi_spec)"
+            else
+              echo "Warning: No configuration found for adapter: $adapter"
+            fi
+          done
+          
+          MATRIX_JSON+="]}"
+          
+          if [[ -n "$MATRIX_ENTRIES" ]]; then
+            MATRIX_JSON='{"include":['$MATRIX_ENTRIES']}'
+          else
+            MATRIX_JSON='{"include":[]}'
+            echo "No adapters to build - empty matrix"
+          fi
+          
+          echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+          echo "Final generated matrix: $MATRIX_JSON"
+
+          
+  docker-build-push:
+    name: Build and Push Docker Images (${{ matrix.adapter }})
+    runs-on: ubuntu-latest
+    needs: [setup-matrix]
+    if: ${{ needs.setup-matrix.outputs.matrix != '{"include":[]}' }}
+    strategy:
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: Wandalen/wretry.action@v3.5.0
+        with:
+          action: docker/login-action@v3
+          attempt_limit: 3
+          attempt_delay: 7200
+          with: |
+            registry: ${{ inputs.registry-name || 'ncrvoyix-pmi-adapters-docker-snapshots.jfrog.io' }}
+            username: ${{ secrets.R10_JFROG_USER }}
+            password: ${{ secrets.R10_JFROG_APIKEY }}
+
+      - name: Login to edge GCP
+        if: ${{ inputs.push-edge == true }}
+        id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.R10_EDGE_DOCKER_REGISTRY_SA }}
+    
+      - name: Configure Docker to GCP edge
+        if: ${{ inputs.push-edge == true }}
+        run: gcloud --quiet auth configure-docker us-east1-docker.pkg.dev
+        
+      - name: Set environment variables for adapter
+        run: |
+          echo "=== Building Adapter: ${{ matrix.adapter }} ==="
+          echo "PMI Version: ${{ matrix.pmi_version }}"
+          echo "OpenAPI Spec: ${{ matrix.openapi_spec }}"
+          echo "Registry: ${{ inputs.registry-name || 'ncrvoyix-pmi-adapters-docker-snapshots.jfrog.io' }}"
+          echo ""
+          
+          echo "ADAPTER=${{ matrix.adapter }}" >> $GITHUB_ENV
+          echo "PMI_VERSION=${{ matrix.pmi_version }}" >> $GITHUB_ENV
+          echo "OPENAPI_SPEC_FILE=${{ matrix.openapi_spec }}" >> $GITHUB_ENV
+          echo "IMAGE=${{ format('{0}/{1}', inputs.registry-name || 'ncrvoyix-pmi-adapters-docker-snapshots.jfrog.io', matrix.adapter) }}" >> $GITHUB_ENV
+          echo "IMAGE_EDGE=${{ format('{0}/{1}', inputs.registry-name-edge || 'us-east1-docker.pkg.dev/ret-edge-pltf-infra/workloads', matrix.adapter) }}" >> $GITHUB_ENV
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.IMAGE }}
+            ${{ github.ref == 'refs/heads/main' && env.IMAGE_EDGE || '' }}
+          tags: |
+            # Manual tag input (if provided)
+            type=raw,value=${{ inputs.tag-name }},enable=${{ inputs.tag-name != '' }}
+            # Main branch gets latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && inputs.tag-name == '' }}
+            # Pull request gets pr-number
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' && inputs.tag-name == '' }}
+            # Everything else gets pr-run_number
+            type=raw,value=pr-${{ github.run_number }},enable=${{ github.ref != 'refs/heads/main' && github.event_name != 'pull_request' && inputs.tag-name == '' }}
+          flavor: |
+            latest=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v6.18.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: ${{ env.PROJECT_PATH }}
+          file: adapters/${{ matrix.adapter }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PMI_VERSION=${{ matrix.pmi_version }}
+            ADAPTER=${{ matrix.adapter }}
+            OPENAPI_SPEC_FILE=${{ matrix.openapi_spec }}
