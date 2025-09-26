@@ -1,0 +1,174 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'go-rest-api/**'
+      - 'go-test-api/**'
+      - 'other_project_dockerfile'
+  pull_request:
+    branches: [main]
+    types: [ opened, synchronize ]
+    paths:
+      - 'go-rest-api/**'
+      - 'go-test-api/**'
+      - 'other_project_dockerfile'
+  workflow_dispatch:
+    inputs:
+      go-api-name:
+        description: "Go API to build (e.g., go-rest-api, go-test-api, or all)"
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - 'go-rest-api'
+          - 'go-test-api'
+        default: 'all'
+      tag-name:
+        description: "Custom tag name (optional)"
+        required: false
+      registry-name-dockerhub:
+        description: 'registry docker hub'
+        required: false
+        type: choice
+        options:
+          - 'gh-action-dh-rest-repo'
+          - 'gh-action-dh-test-repo'
+          - 'ns185356-first-repo'
+        default: 'ns185356-first-repo'
+      # registry-name-edge:
+      #   description: 'registry docker repo edge'
+      #   required: false
+      #   type: string
+      #   default: 'us-east1-docker.pkg.dev/ret-edge-pltf-infra/workloads'
+      push-latest:
+        description: "Push the 'latest' tag (only on main)"
+        required: false
+        type: boolean
+        default: false
+      push-dh:
+        description: "Push to dh registry"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: read
+
+jobs:
+
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go-rest-api-changed: ${{ steps.filter.outputs.go-rest-api-changed }}
+      go-test-api-changed: ${{ steps.filter.outputs.go-test-api-changed }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            go-rest-api-changed:
+              - 'go-rest-api/**'
+            go-test-api-changed:
+              - 'go-test-api/**'
+            shared:
+              - 'other_project_dockerfile'
+
+  setup-matrix:
+    name: Setup build matrix
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set up matrix
+        id: set-matrix
+        run: |
+
+          echo "=== Change Detection Results ==="
+          echo "Go REST API Changed: ${{ needs.detect-changes.outputs.go-rest-api-changed }}"
+          echo "Go Test API Changed: ${{ needs.detect-changes.outputs.go-test-api-changed }}"
+          echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
+          echo "================================"
+
+          echo "=== Setting up matrix ===="
+          GO_API_NAME="${{ github.event.inputs.go-api-name || 'all' }}"
+          GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
+          GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
+          SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
+
+          MATRIX='{"include":[]}'
+
+          if [[ "$GO_API_NAME" == "all" ]]; then
+            if [[ "$GO_REST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
+              MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-rest-api"}]')
+            fi
+            if [[ "$GO_TEST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
+              MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-test-api"}]')
+            fi
+          elif [[ "$GO_API_NAME" == "go-rest-api" ]]; then
+            MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-rest-api"}]')
+          elif [[ "$GO_API_NAME" == "go-test-api" ]]; then
+            MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-test-api"}]')
+          fi
+
+          if [[ $(echo $MATRIX | jq '.include | length') -eq 0 ]]; then
+            echo "No changes detected in selected Go APIs. Exiting."
+            exit 0
+          fi
+
+          echo "Matrix setup complete: $MATRIX"
+          echo "::set-output name=matrix::$MATRIX"
+
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ matrix.go-api == 'go-rest-api' && 'ns185356/gh-action-dh-rest-repo' || '' }}
+            ${{ matrix.go-api == 'go-test-api' && 'ns185356/gh-action-dh-test-repo' || '' }}
+          tags: |
+            # Manual tag input (if provided)
+            type=raw,value=${{ inputs.tag-name }},enable=${{ inputs.tag-name != '' }}
+            # Main branch gets latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && inputs.tag-name == '' }}
+            # Pull request gets pr-number
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' && inputs.tag-name == '' }}
+            # Everything else gets pr-run_number
+            type=raw,value=pr-${{ github.run_number }},enable=${{ github.ref != 'refs/heads/main' && github.event_name != 'pull_request' && inputs.tag-name == '' }}
+          flavor: |
+            latest=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
