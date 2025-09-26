@@ -137,8 +137,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
-    # optional: skip if matrix is empty (setup-matrix already exited when empty)
-    if: ${{ matrix.go-api != '' }}
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
