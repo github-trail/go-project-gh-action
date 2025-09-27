@@ -13,7 +13,7 @@ on:
     paths:
       - "go-rest-api/**"
       - "go-test-api/**"
-      - "other_project_dockerfile"
+      # - "other_project_dockerfile"
   workflow_dispatch:
     inputs:
       go-api-name:
@@ -35,8 +35,8 @@ on:
         options:
           - "gh-action-dh-rest-repo"
           - "gh-action-dh-test-repo"
-          - "ns185356-first-repo"
-        default: "ns185356-first-repo"
+          # - "ns185356-first-repo"
+        default: "gh-action-dh-rest-repo"
       # registry-name-edge:
       #   description: 'registry docker repo edge'
       #   required: false
@@ -65,7 +65,7 @@ jobs:
     outputs:
       go-rest-api-changed: ${{ steps.filter.outputs.go-rest-api-changed }}
       go-test-api-changed: ${{ steps.filter.outputs.go-test-api-changed }}
-      shared: ${{ steps.filter.outputs.shared }}
+      # shared: ${{ steps.filter.outputs.shared }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -80,8 +80,8 @@ jobs:
               - 'go-rest-api/**'
             go-test-api-changed:
               - 'go-test-api/**'
-            shared:
-              - 'other_project_dockerfile'
+            # shared:
+            #   - 'other_project_dockerfile'
 
   setup-matrix:
     name: Setup build matrix
@@ -97,22 +97,22 @@ jobs:
           echo "=== Change Detection Results ==="
           echo "Go REST API Changed: ${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           echo "Go Test API Changed: ${{ needs.detect-changes.outputs.go-test-api-changed }}"
-          echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
+          # echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
           echo "================================"
 
           echo "=== Setting up matrix ===="
           GO_API_NAME="${{ github.event.inputs.go-api-name || 'all' }}"
           GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
-          SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
+          # SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
 
           MATRIX='{"include":[]}'
 
           if [[ "$GO_API_NAME" == "all" ]]; then
-            if [[ "$GO_REST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
+            if [[ "$GO_REST_API_CHANGED" == "true" ]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-rest-api"}]')
             fi
-            if [[ "$GO_TEST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
+            if [[ "$GO_TEST_API_CHANGED" == "true" ]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-test-api"}]')
             fi
           elif [[ "$GO_API_NAME" == "go-rest-api" ]]; then
