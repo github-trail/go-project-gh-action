@@ -94,39 +94,40 @@ jobs:
       - name: Set up matrix
         id: set-matrix
         run: |
+          # Initialize default matrix
+          MATRIX='{"include":[]}'
+
           echo "=== Change Detection Results ==="
           echo "Go REST API Changed: ${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           echo "Go Test API Changed: ${{ needs.detect-changes.outputs.go-test-api-changed }}"
           # echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
           echo "================================"
 
-          echo "=== Setting up matrix ===="
+          echo "=== Setup matrix based on inputs ===="
           GO_API_NAME="${{ github.event.inputs.go-api-name || 'all' }}"
           GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
           # SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
 
-          MATRIX='{"include":[]}'
 
+          # Default behavior: when GO_API_NAME == 'all' include both projects regardless of change detection
           if [[ "$GO_API_NAME" == "all" ]]; then
-            if [[ "$GO_REST_API_CHANGED" == "true" ]]; then
-              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-rest-api"}]')
-            fi
-            if [[ "$GO_TEST_API_CHANGED" == "true" ]]; then
-              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-test-api"}]')
-            fi
+            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"},{"go-api":"go-test-api"}]')
           elif [[ "$GO_API_NAME" == "go-rest-api" ]]; then
-            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-rest-api"}]')
+            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"}]')
           elif [[ "$GO_API_NAME" == "go-test-api" ]]; then
-            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-test-api"}]')
+            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-test-api"}]')
           fi
 
-          # always emit a JSON matrix output (may be empty include)
-          echo "Matrix setup complete: $MATRIX"
+          # Validate JSON
+          echo "$MATRIX" | jq '.' > /dev/null || MATRIX='{"include":[]}'
 
-          # write matrix to job outputs using GITHUB_OUTPUT (safe for multi-line)
-          cat <<EOF >> "$GITHUB_OUTPUT"
-            matrix=$MATRIX
+          # Debug output
+          echo "Final matrix: $MATRIX"
+
+          # Write to outputs without indentation
+          cat << EOF >> $GITHUB_OUTPUT
+          matrix=$MATRIX
           EOF
 
           if [[ $(echo "$MATRIX" | jq '.include | length') -eq 0 ]]; then
@@ -139,7 +140,8 @@ jobs:
     needs: setup-matrix
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix || '{"include":[]}') }}
+      fail-fast: false
 
     steps:
       - name: Checkout code
