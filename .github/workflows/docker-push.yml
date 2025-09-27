@@ -4,15 +4,15 @@ on:
   push:
     branches: [main]
     paths:
-      - "go-rest-api/**"
-      - "go-test-api/**"
+      - "go-apis/go-rest-api/**"
+      - "go-apis/go-test-api/**"
       # - "other_project_dockerfile"
   pull_request:
     branches: [main]
     types: [opened, synchronize]
     paths:
-      - "go-rest-api/**"
-      - "go-test-api/**"
+      - "go-apis/go-rest-api/**"
+      - "go-apis/go-test-api/**"
       # - "other_project_dockerfile"
   workflow_dispatch:
     inputs:
@@ -78,9 +78,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           filters: |
             go-rest-api-changed:
-              - 'go-rest-api/**'
+              - 'go-apis/go-rest-api/**'
             go-test-api-changed:
-              - 'go-test-api/**'
+              - 'go-apis/go-test-api/**'
             # shared:
             #   - 'other_project_dockerfile'
 
