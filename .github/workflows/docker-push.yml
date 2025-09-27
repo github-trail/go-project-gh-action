@@ -151,9 +151,9 @@ jobs:
       - name: Show build context (debug)
         run: |
           echo "Building for matrix entry: ${{ matrix.go-api }}"
-          ls -la ./${{ matrix.go-api }} || true
-          if [ ! -f "./${{ matrix.go-api }}/Dockerfile" ]; then
-            echo "ERROR: Dockerfile not found in ./${{ matrix.go-api }}/"
+          ls -la ./go-apis/${{ matrix.go-api }} || true
+          if [ ! -f "./go-apis/${{ matrix.go-api }}/Dockerfile" ]; then
+            echo "ERROR: Dockerfile not found in ./go-apis/${{ matrix.go-api }}/"
             exit 1
           fi
 
@@ -189,8 +189,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           # changed: set context to the api folder and point to that folder's Dockerfile
-          context: ./${{ matrix.go-api }}
-          file: ./${{ matrix.go-api }}/Dockerfile
+          context: ./go-apis/${{ matrix.go-api }}
+          file: ./go-apis/${{ matrix.go-api }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
