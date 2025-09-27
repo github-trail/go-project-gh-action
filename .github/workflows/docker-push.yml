@@ -6,7 +6,7 @@ on:
     paths:
       - "go-rest-api/**"
       - "go-test-api/**"
-      - "other_project_dockerfile"
+      # - "other_project_dockerfile"
   pull_request:
     branches: [main]
     types: [opened, synchronize]
