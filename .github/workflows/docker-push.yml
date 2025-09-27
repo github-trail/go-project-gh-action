@@ -4,16 +4,16 @@ on:
   push:
     branches: [main]
     paths:
-      - 'go-rest-api/**'
-      - 'go-test-api/**'
-      - 'other_project_dockerfile'
+      - "go-rest-api/**"
+      - "go-test-api/**"
+      - "other_project_dockerfile"
   pull_request:
     branches: [main]
-    types: [ opened, synchronize ]
+    types: [opened, synchronize]
     paths:
-      - 'go-rest-api/**'
-      - 'go-test-api/**'
-      - 'other_project_dockerfile'
+      - "go-rest-api/**"
+      - "go-test-api/**"
+      - "other_project_dockerfile"
   workflow_dispatch:
     inputs:
       go-api-name:
@@ -21,22 +21,22 @@ on:
         required: false
         type: choice
         options:
-          - 'all'
-          - 'go-rest-api'
-          - 'go-test-api'
-        default: 'all'
+          - "all"
+          - "go-rest-api"
+          - "go-test-api"
+        default: "all"
       tag-name:
         description: "Custom tag name (optional)"
         required: false
       registry-name-dockerhub:
-        description: 'registry docker hub'
+        description: "registry docker hub"
         required: false
         type: choice
         options:
-          - 'gh-action-dh-rest-repo'
-          - 'gh-action-dh-test-repo'
-          - 'ns185356-first-repo'
-        default: 'ns185356-first-repo'
+          - "gh-action-dh-rest-repo"
+          - "gh-action-dh-test-repo"
+          - "ns185356-first-repo"
+        default: "ns185356-first-repo"
       # registry-name-edge:
       #   description: 'registry docker repo edge'
       #   required: false
@@ -60,7 +60,6 @@ permissions:
   pull-requests: read
 
 jobs:
-
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -91,10 +90,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      # ...existing code...
       - name: Set up matrix
         id: set-matrix
         run: |
-
           echo "=== Change Detection Results ==="
           echo "Go REST API Changed: ${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           echo "Go Test API Changed: ${{ needs.detect-changes.outputs.go-test-api-changed }}"
@@ -111,33 +110,37 @@ jobs:
 
           if [[ "$GO_API_NAME" == "all" ]]; then
             if [[ "$GO_REST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
-              MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-rest-api"}]')
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-rest-api"}]')
             fi
             if [[ "$GO_TEST_API_CHANGED" == "true" || "$SHARED_CHANGED" == "true" ]]; then
-              MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-test-api"}]')
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-test-api"}]')
             fi
           elif [[ "$GO_API_NAME" == "go-rest-api" ]]; then
-            MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-rest-api"}]')
+            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-rest-api"}]')
           elif [[ "$GO_API_NAME" == "go-test-api" ]]; then
-            MATRIX=$(echo $MATRIX | jq '.include += [{"go-api": "go-test-api"}]')
+            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api": "go-test-api"}]')
           fi
 
-          if [[ $(echo $MATRIX | jq '.include | length') -eq 0 ]]; then
+          # always emit a JSON matrix output (may be empty include)
+          echo "Matrix setup complete: $MATRIX"
+
+          # write matrix to job outputs using GITHUB_OUTPUT (safe for multi-line)
+          cat <<EOF >> "$GITHUB_OUTPUT"
+            matrix=$MATRIX
+          EOF
+
+          if [[ $(echo "$MATRIX" | jq '.include | length') -eq 0 ]]; then
             echo "No changes detected in selected Go APIs. Exiting."
             exit 0
           fi
 
-          echo "Matrix setup complete: $MATRIX"
-          echo "::set-output name=matrix::$MATRIX"
-          
-# ...existing code...
   build-and-push:
     # changed: ensure this job uses the matrix produced earlier and depends on setup-matrix
     needs: setup-matrix
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -188,4 +191,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-# ...existing code...
