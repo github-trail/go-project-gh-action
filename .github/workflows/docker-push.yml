@@ -33,10 +33,11 @@ on:
         required: false
         type: choice
         options:
+          - "all"
           - "gh-action-dh-rest-repo"
           - "gh-action-dh-test-repo"
           # - "ns185356-first-repo"
-        default: "gh-action-dh-rest-repo"
+        default: "all"
       # registry-name-edge:
       #   description: 'registry docker repo edge'
       #   required: false
