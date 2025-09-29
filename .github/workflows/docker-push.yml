@@ -9,6 +9,9 @@ on:
       # - "other_project_dockerfile"
   pull_request:
     branches: [main]
+    # It specifies which types of pull request events should trigger the workflow
+    # opened: Triggers the workflow when a new pull request is created
+    # synchronize: Triggers the workflow when new commits are pushed to the pull request's branch
     types: [opened, synchronize]
     paths:
       - "go-apis/go-rest-api/**"
@@ -17,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       go-api-name:
-        description: "Go API to build (e.g., go-rest-api, go-test-api, or all)"
+        description: "Select the project to build (e.g., go-rest-api, go-test-api, or all)"
         required: false
         type: choice
         options:
@@ -26,7 +29,7 @@ on:
           - "go-test-api"
         default: "all"
       tag-name:
-        description: "Custom tag name (optional)"
+        description: "Define the tag name of the docker image (optional)"
         required: false
       registry-name-dockerhub:
         description: "registry docker hub"
@@ -105,7 +108,7 @@ jobs:
           echo "================================"
 
           echo "=== Setup matrix based on inputs ===="
-          GO_API_NAME="${{ github.event.inputs.go-api-name || 'all' }}"
+          GO_API_NAME="${{ github.event.inputs.go-api-name }}"
           GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
           # SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
