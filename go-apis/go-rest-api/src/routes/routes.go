@@ -17,5 +17,6 @@ func SetupRoutes(cfg *config.Config) *mux.Router {
 		handlers.GetExternalHandler(w, r, cfg)
 	}).Methods(http.MethodGet)
 
+	
 	return router
 }

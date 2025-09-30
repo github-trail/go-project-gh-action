@@ -109,10 +109,13 @@ jobs:
 
           echo "=== Setup matrix based on inputs ===="
           GO_API_NAME="${{ github.event.inputs.go-api-name }}"
+          echo GO_API_NAME
           GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
+          echo GO_REST_API_CHANGED
           GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
+          echo GO_TEST_API_CHANGED
           # SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
-
+          echo "================================"
 
           # Default behavior: when GO_API_NAME == 'all' include both projects regardless of change detection
           if [[ "$GO_API_NAME" == "all" ]]; then
