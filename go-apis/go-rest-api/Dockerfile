@@ -15,5 +15,6 @@ RUN go build -o /app/main .
 FROM gcr.io/distroless/base
 
 COPY --from=builder /app/main /
+COPY --from=builder /app/.env* /
 
 CMD ["/main"]
