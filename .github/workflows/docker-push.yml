@@ -108,7 +108,7 @@ jobs:
           echo "================================"
 
           # Check if workflow was triggered manually
-          if [[ "${{ github.event_name}}" == "workflow_dispatch"]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # Handle manual trigger with go-api-name input
             if [[ "${{ github.event.inputs.go-api-name }}" == "all"]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"},{"go-api":"go-test-api"}]')
