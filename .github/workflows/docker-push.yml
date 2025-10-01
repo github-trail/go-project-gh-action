@@ -107,23 +107,24 @@ jobs:
           # echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
           echo "================================"
 
-          echo "=== Setup matrix based on inputs ===="
-          GO_API_NAME="${{ github.event.inputs.go-api-name }}"
-          echo GO_API_NAME
-          GO_REST_API_CHANGED="${{ needs.detect-changes.outputs.go-rest-api-changed }}"
-          echo GO_REST_API_CHANGED
-          GO_TEST_API_CHANGED="${{ needs.detect-changes.outputs.go-test-api-changed }}"
-          echo GO_TEST_API_CHANGED
-          # SHARED_CHANGED="${{ needs.detect-changes.outputs.shared }}"
-          echo "================================"
-
-          # Default behavior: when GO_API_NAME == 'all' include both projects regardless of change detection
-          if [[ "$GO_API_NAME" == "all" ]]; then
-            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"},{"go-api":"go-test-api"}]')
-          elif [[ "$GO_API_NAME" == "go-rest-api" ]]; then
-            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"}]')
-          elif [[ "$GO_API_NAME" == "go-test-api" ]]; then
-            MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-test-api"}]')
+          # Check if workflow was triggered manually
+          if [[ "${{ github.event_name}}" == "workflow_dispatch"]]; then
+            # Handle manual trigger with go-api-name input
+            if [[ "${{ github.event.inputs.go-api-name }}" == "all"]]; then
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"},{"go-api":"go-test-api"}]')
+            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-rest-api"]]; then
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"}]')
+            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-test-api"]]; then
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-test-api"}]')
+            fi
+          else
+            # Handle push/PR triggers based on change detection
+            if [[ "${{ needs.detect-changes.outputs.go-rest-api-changed }}" == "true" ]]; then
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"}]')
+            fi
+            if [[ "${{ needs.detect-changes.outputs.go-test-api-changed }}" == "true" ]]; then
+              MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-test-api"}]')
+            fi
           fi
 
           # Validate JSON

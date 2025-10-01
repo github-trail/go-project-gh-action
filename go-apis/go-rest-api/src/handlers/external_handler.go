@@ -25,12 +25,13 @@ type PingResponse struct {
 
 func GetExternalHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
 	requestID := r.Header.Get("X-Request-ID")
+
 	if requestID == "" {
 		requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
 
 	fullURL := cfg.ExternalAPIURL + "/"
-	log.Printf("[%s] Attempting to call external API: %s", requestID, fullURL)
+	log.Printf("[%s] Attempting to call the external API: %s", requestID, fullURL)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
