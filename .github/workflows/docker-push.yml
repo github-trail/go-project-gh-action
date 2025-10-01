@@ -104,17 +104,16 @@ jobs:
           echo "=== Change Detection Results ==="
           echo "Go REST API Changed: ${{ needs.detect-changes.outputs.go-rest-api-changed }}"
           echo "Go Test API Changed: ${{ needs.detect-changes.outputs.go-test-api-changed }}"
-          # echo "Shared Files Changed: ${{ needs.detect-changes.outputs.shared }}"
           echo "================================"
 
           # Check if workflow was triggered manually
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # Handle manual trigger with go-api-name input
-            if [[ "${{ github.event.inputs.go-api-name }}" == "all"]]; then
+            if [[ "${{ github.event.inputs.go-api-name }}" == "all" ]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"},{"go-api":"go-test-api"}]')
-            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-rest-api"]]; then
+            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-rest-api" ]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-rest-api"}]')
-            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-test-api"]]; then
+            elif [[ "${{ github.event.inputs.go-api-name }}" == "go-test-api" ]]; then
               MATRIX=$(echo "$MATRIX" | jq -c '.include += [{"go-api":"go-test-api"}]')
             fi
           else
@@ -134,9 +133,7 @@ jobs:
           echo "Final matrix: $MATRIX"
 
           # Write to outputs without indentation
-          cat << EOF >> $GITHUB_OUTPUT
-          matrix=$MATRIX
-          EOF
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
           if [[ $(echo "$MATRIX" | jq '.include | length') -eq 0 ]]; then
             echo "No changes detected in selected Go APIs. Exiting."
