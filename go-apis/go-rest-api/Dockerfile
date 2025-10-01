@@ -17,4 +17,5 @@ FROM gcr.io/distroless/base
 COPY --from=builder /app/main /
 COPY --from=builder /app/.env* /
 
+# Default exposed port for the Go REST API is 8080
 CMD ["/main"]
