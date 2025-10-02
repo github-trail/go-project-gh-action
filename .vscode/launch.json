@@ -12,7 +12,9 @@
             "program": "${workspaceFolder}/go-apis/go-rest-api/src/main.go",
             "cwd": "${workspaceFolder}/go-apis/go-rest-api",
             "env": {
-                // "EXTERNAL_API_URL": "http://153.58.140.42:8080"
+                "EXTERNAL_API_URL": "http://153.58.140.51:8080",
+                "APP_ENV": "prod",
+                "SERVER_PORT": "8080"
             }
         }
     ]

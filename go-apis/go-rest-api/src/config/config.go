@@ -28,26 +28,26 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 	// Get environment from .env file or default to dev
-	env := os.Getenv("APP_ENV")
-	if env == "" {
-		env = "dev"
-	}
+	// env := os.Getenv("APP_ENV")
+	// if env == "" {
+	// 	env = "dev"
+	// }
 
 	// Then load the environment specific file
 	// Then load the environment specific file using project root
-	envFile := filepath.Join(projectRoot, fmt.Sprintf(".env.%s", env))
-	if err := godotenv.Load(envFile); err != nil {
-		// Only log if file exists but couldn't be loaded
-		if !os.IsNotExist(err) {
-			log.Printf("Warning: Error loading %s file - %v", envFile, err)
-		}
-	}
+	// envFile := filepath.Join(projectRoot, fmt.Sprintf(".env.%s", env))
+	// if err := godotenv.Load(envFile); err != nil {
+	// 	// Only log if file exists but couldn't be loaded
+	// 	if !os.IsNotExist(err) {
+	// 		log.Printf("Warning: Error loading %s file - %v", envFile, err)
+	// 	}
+	// }
 
 	// Now get values from environment after both files are loaded
 	cfg := &Config{
 		ExternalAPIURL: os.Getenv("EXTERNAL_API_URL"),
 		ServerPort:     os.Getenv("SERVER_PORT"),
-		Environment:    env,
+		Environment:    os.Getenv("APP_ENV"),
 	}
 
 	// Apply defaults only if values are empty
