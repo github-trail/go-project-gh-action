@@ -12,10 +12,18 @@ WORKDIR /app/src
 RUN go mod tidy
 RUN go build -o /app/main .
 
-FROM gcr.io/distroless/base
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS requests and basic tools
+RUN apk --no-cache add ca-certificates tzdata curl
+
+WORKDIR /root/
 
 COPY --from=builder /app/main /
 COPY --from=builder /app/.env* /
+
+# Create log directory
+RUN mkdir -p /var/log
 
 # Default exposed port for the Go REST API is 8080
 CMD ["/main"]
